@@ -60,15 +60,15 @@ def trova_corrispondenza (intensità_ref, intensità_od, mean):
         # J gira effettivamente sui valori per calcolare le differenze
 
         if mean:
-            # METODO ALTERNATIVO: 'REBIN' DIFFERENZA TRE VALORI ALLA VOLTA 
-            for j in range(0, l_ref-3, 3):
-                media_tre_val_ref = np.mean(intensità_ref[j:j+3])
-                media_tre_val_od  = np.mean(intensità_od[j+i:j+3+i])
-                somma_quadratica += (media_tre_val_ref-media_tre_val_od)**2
+            # METODO ALTERNATIVO: 'REBIN' DIFFERENZA N VALORI ALLA VOLTA 
+            for j in range(0, l_ref-5, 5):
+                media_n_val_ref = np.mean(intensità_ref[j:j+5])
+                media_n_val_od  = np.mean(intensità_od[j+i:j+5+i])
+                somma_quadratica += (media_n_val_ref-media_n_val_od)**2
         else:
             # METODO BASICO: DIFFERENZA VALORE PER VALORE
             for j in range(l_ref):
-                # somma_quadratica += (intensità_ref[j]-intensità_od[j+i])**2
+                somma_quadratica += (intensità_ref[j]-intensità_od[j+i])**2
                 
         if somma_quadratica < valore_precedente:
             inizio_regione = i
