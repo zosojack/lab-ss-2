@@ -1,6 +1,33 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# rimuove i valori troppo distanti che non hanno nessun significato
+def pulisci_valori_nosense (intensità):
+    # prendo l'asse della frequenza, lo divido in quinti, prendo la regione centrale
+    quinto = len(intensità) // 5
+    intensita_centrale = intensità[2*quinto:3*quinto]
+    
+    # Calcolo media e deviazione standard della regione centrale
+    mu = np.mean(intensita_centrale)
+    sigma = np.std(intensita_centrale)
+    
+    # Copio l'intensità per poterla modificare
+    intensita_pulita = np.copy(intensità)
+    
+    # Sostituisco i valori che distano più di 3 sigma dalla media con il valore precedente
+    # lo faccio dal centro all'esterno
+    for i in range(round(len(intensita_pulita)/2), len(intensita_pulita)):
+        if abs(intensita_pulita[i] - intensita_pulita[i-1]) > 4 * sigma:
+            intensita_pulita[i] = intensita_pulita[i-1]
+            
+    # devo fare la stessa cosa anche nell'altro verso
+    for i in range(int(len(intensita_pulita)/2), -1, -1):
+        if abs(intensita_pulita[i+1] - intensita_pulita[i]) > 4 * sigma:
+            intensita_pulita[i] = intensita_pulita[i+1]    
+    
+    return intensita_pulita
+
+
 # individua la regione dello sweep
 def trova_regione (ch_B):
     # CONSIDERAZIONI
@@ -35,6 +62,127 @@ def intensità_e_frequenze_sweep (time, ch_A, ch_B):
     
     return frequenze, intensità
 
+
+from scipy.signal import find_peaks
+
+def trova_valli(segnale, prominence=0.003, distance=10, width=0.1):
+    """
+    Trova le valli in un segnale usando find_peaks.
+    
+    Args:
+        segnale: array del segnale da analizzare
+        prominence: prominenza minima delle valli
+        distance: distanza minima tra valli consecutive
+        width: larghezza minima delle valli
+    
+    Returns:
+        indici: posizioni delle valli nel segnale originale
+        proprietà: caratteristiche delle valli trovate
+    """
+    # Inverto il segnale per trasformare le valli in picchi
+    segnale_invertito = -segnale
+    
+    # Trovo i picchi nel segnale invertito (valli nell'originale)
+    indici_valli, proprietà_valli = find_peaks(
+        segnale_invertito,
+        prominence=prominence,  # Quanto deve essere profonda la valle
+        distance=distance,      # Distanza minima tra valli consecutive
+        width=width             # Larghezza minima della valle
+    )
+    
+    return indici_valli, proprietà_valli
+
+# zero inteso come punto in cui la der prima inverte segno,
+# siccome è traslata spesso non è proprio 0 ma -0.0005
+def i_primo_zero (vettore, partenza, zero=0):
+    first = partenza
+    taglio = vettore[partenza:]
+    for j in range(len(taglio)-2):
+        if taglio[j] < zero and taglio[j+1] > zero or taglio[j] > zero and taglio[j+1] < zero:
+            first = j + partenza  # restituisce l'indice del primo zero trovato
+            return first
+    return first  # se non trova nessun zero, ritorna l'indice di partenza
+
+def trova_primi_zeri (spettro, indici_valli):
+    # il segnale del lock in è una derivata prima! quindi la valle in realtà è
+    # il primo zero che segue la rispettiva valle nel grafico lock-in!
+    # non è precisamente zero però, è leggermente traslata sulle y
+    # devo usare una media 
+    
+    indici_primi_zeri = []
+    zero = np.nanmean(np.array(spettro))
+    
+    print("zero:", zero)
+    
+    # per ogni valle
+    for i in indici_valli:
+        # cerco il primo zero successivo
+        indici_primi_zeri.append(i_primo_zero(spettro, partenza=i, zero=zero))
+            
+    return indici_primi_zeri
+
+
+def migliora_corrispondenza (ref, lock_in):
+    # devo pulire completamente il ref lasciando solo i picchi
+    # quindi fare un confronto tra i picchi del ref e quelli del lock-in
+    # quest'ultimo è comodo perché ha già i picchi ben definiti
+    
+    # valli ref
+    i_valli_ref, _ = trova_valli(ref)
+    i_valli_lock_in, _ = trova_valli(lock_in, prominence=0.00001, distance=10, width=0.0001)
+    i_valli_od = trova_primi_zeri(lock_in, i_valli_lock_in)
+    
+    print("VALLI INDIVIDUATE:")
+    print('ref', i_valli_ref)
+    print('lock', i_valli_lock_in)
+    print('od', i_valli_od)
+    
+    
+    # cerca quelli più vicini
+    min_distanza = 1000000
+    indice_ref_minimo = -1
+    indice_od_minimo = -1
+    
+    # METODO 1: per ogni valle nel riferimento
+    '''
+    for idx_ref in i_valli_ref:
+        # Calcola la distanza da ogni valle nel lock-in
+        for idx_od in i_valli_od:
+            distanza = abs(idx_ref - idx_od)
+            
+            if distanza < min_distanza:
+                min_distanza = distanza
+                indice_ref_minimo = idx_ref
+                indice_od_minimo = idx_od
+    '''     
+    # METODO 2: PER LA MINIMA DELLE VALLI (così sei sicuro che lo sia)
+    # indice (nel vettore degli indici minimi) dell'indice che dà la valle minima
+    indici_ordinati = np.argsort(ref[i_valli_ref])
+    # indice che dà la valle minima:
+    if i_valli_ref[indici_ordinati[0]] > 100:
+        idx_ref = i_valli_ref[indici_ordinati[0]]
+    elif i_valli_ref[indici_ordinati[1]] > 100:
+        idx_ref = i_valli_ref[indici_ordinati[1]]
+    else: 
+        idx_ref = i_valli_ref[indici_ordinati[2]]
+        
+        
+    print("minimo:", ref[idx_ref], "| indice:", idx_ref)
+    
+    # Calcola la distanza tra questa e ogni valle nel lock-in
+    for idx_od in i_valli_od:
+        distanza = abs(idx_ref - idx_od)
+        
+        if distanza < min_distanza:
+            min_distanza = distanza
+            indice_ref_minimo = idx_ref
+            indice_od_minimo = idx_od
+                
+    # stimo l'offset con questa distanza!
+    offset = (indice_od_minimo - indice_ref_minimo)
+    
+    return offset
+    
 
 def trova_corrispondenza (intensità_ref, intensità_od, mean):
     # CONSIDERAZIONI
@@ -77,7 +225,7 @@ def trova_corrispondenza (intensità_ref, intensità_od, mean):
     return inizio_regione, fine_regione
     
     
-def leggi_files (reference: str, odmr: str, mean):
+def leggi_files (reference: str, odmr: str, index, mean):
     
     # leggo il reference
     data = np.loadtxt(reference, skiprows=9, delimiter=',')
@@ -88,28 +236,70 @@ def leggi_files (reference: str, odmr: str, mean):
     # trovo la regione dello sweep e la ritaglio
     frequenze, intensità_ref = intensità_e_frequenze_sweep(time_ref, ch_A_ref, ch_B_ref)
     
+    # pulisco i valori che non hanno senso
+    intensità_ref_pulita = pulisci_valori_nosense(intensità_ref)
+    
     # leggo odmr
     data2 = np.loadtxt(odmr, skiprows=9, delimiter=',')
     ch_A_od = data2[:, 1]  # in V - PL intensity
     ch_B_od = data2[:, 2]  # in V - lock-in
     
+    # pulisco i valori che non hanno senso
+    ch_A_od_pulita = pulisci_valori_nosense(ch_A_od)
+    
     # cerco corrispondenzza tra intensità_ref e intensità odmr
-    inizio, fine = trova_corrispondenza(intensità_ref, ch_A_od, mean=mean)
-    # da questo indice parte, poi so che da lì ci sono altri 2799 punti
+    inizio, fine = trova_corrispondenza(intensità_ref_pulita, ch_A_od_pulita, mean=mean)
     
-    # ritaglio gli spettri
-    intensità_od = ch_A_od[inizio:fine]
-    intensità_lock_in = ch_B_od[inizio:fine]
+    # shifto per migliorare
+    offset = migliora_corrispondenza(intensità_ref_pulita, ch_B_od[inizio:fine])
     
-    return frequenze, intensità_od, intensità_lock_in, intensità_ref
+    if index == 0:
+        offset -= 16
+        
+    elif index == 1:
+        offset -= 46
+        
+    elif index == 4:
+        offset -= 25
+        
+    elif index == 5:
+        offset -= 2
+        
+    elif index == 6:
+        offset -= 13
+        
+    elif index == 7:
+        offset -= 35
+        
+    elif index == 8:
+        offset -= 12
 
-def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, mean: bool = False):
+    inizio_shifted = inizio + offset
+    fine_shifted = fine + offset
     
-    frequenze, intensità_od, intensità_lock_in, intensità_ref = leggi_files(reference, odmr, mean=True)
+    print(f"INIZIO: {inizio}")
+    print(f"FINE: {fine}")
+    print(f"OFFSET: {offset}")
+    
+            
+    # ritaglio gli spettri
+    intensità_od = ch_A_od_pulita[inizio_shifted:fine_shifted]
+    intensità_lock_in = ch_B_od[inizio_shifted:fine_shifted]
+    
+    return frequenze, intensità_od, intensità_lock_in, intensità_ref_pulita
+
+def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, mean: bool = False, index=0):
+    
+    frequenze, intensità_od, intensità_lock_in, intensità_ref = leggi_files(reference, odmr, index=index, mean=True, )
+    
+    frequenze = np.array(frequenze)
+    intensità_od = np.array(intensità_od)
+    intensità_lock_in = np.array(intensità_lock_in)
+    intensità_ref = np.array(intensità_ref)
     
     # prima quella non lokkata
     plt.figure(figsize=(10, 3), dpi=200)
-    plt.plot(frequenze, intensità_od, color='red')
+    plt.plot(frequenze, intensità_od, color='red')    
     plt.xlabel('Frequenza [kHz]')
     plt.ylabel('Intensità PL [V]')
     plt.title('Intensità PL vs Frequenza')
@@ -120,6 +310,16 @@ def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, me
         # stampa le intensità di riferimento per vedere come si sovrappongono
         plt.figure(figsize=(10, 3), dpi=200)
         plt.plot(frequenze, intensità_ref, color='orange', label='REFERENCE')
+        
+        intensità_ref = np.array(intensità_ref)
+        indici_valli, _ = trova_valli(intensità_ref)
+        if len(indici_valli) == 0:
+            print("Nessuna valle trovata nel segnale.")
+        else:
+            plt.scatter(frequenze[indici_valli], intensità_ref[indici_valli], color='green', label='Valli trovate')
+
+        
+        
         plt.xlabel('Frequenza [kHz]')
         plt.ylabel('Intensità PL [V]')
         plt.title('Intensità REFERENCE vs Frequenza')
