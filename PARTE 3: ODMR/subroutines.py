@@ -288,7 +288,7 @@ def leggi_files (reference: str, odmr: str, index, mean):
     
     return frequenze, intensità_od, intensità_lock_in, intensità_ref_pulita
 
-def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, mean: bool = False, index=0):
+def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, mean: bool = False, index=0, dist=0):
     
     frequenze, intensità_od, intensità_lock_in, intensità_ref = leggi_files(reference, odmr, index=index, mean=True, )
     
@@ -334,3 +334,23 @@ def plotta_su_frequenze_odmr (reference: str, odmr: str, debug: bool = False, me
     plt.title('Intensità PL Lokkata vs Frequenza')
     plt.grid(True)
     plt.show()
+    
+    
+    # poi vanno printati in un file .csv : quattro colonne ciascuno
+    # freq | ref | od | lock
+    
+    # Crea il nome del file di output
+    nome_file = f"data/odmr_dist_{dist}.csv"
+    
+    # Apri il file in modalità scrittura
+    with open(nome_file, 'w') as f:
+        # Scrivi l'intestazione con separatori |
+        f.write("  freq    |   ref    |    od    |   lock   \n")
+        f.write("----------+----------+----------+----------\n")
+        
+        # Scrivi i dati riga per riga con formattazione allineata
+        for i in range(len(frequenze)):
+            f.write(f"{frequenze[i]:9.3f} | {intensità_ref[i]:8.5f} | {intensità_od[i]:8.5f} | {intensità_lock_in[i]:8.5f}\n")
+    
+    print(f"Dati salvati nel file: {nome_file}")
+    
