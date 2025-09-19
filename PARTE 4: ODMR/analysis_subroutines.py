@@ -117,7 +117,7 @@ def fit_sin_odmr(odmr, key: str, region: tuple = None, p0 = None, sinp0=None, fi
 
 # PLOTTER #
 
-color = ['blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta']
+color = ['blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral', 'gold', 'silver']
 
 def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
     
@@ -140,7 +140,7 @@ def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
     if title:
         plt.title(title+fr" | D={dist}mm")
     else:
-        plt.title(fr"D=${dist}$mm | {yaxis} vs Frequenza")
+        plt.title(rf"D=${dist}$mm | {yaxis} vs Frequenza")
     plt.grid(linestyle='--')
     plt.tight_layout()
     plt.show()
@@ -185,7 +185,7 @@ def lorentziana_più_quad(nu, A, gamma, nu0, a, b, c):
     """
     return -A / (1 + ((nu - nu0)/gamma)**2) + a * nu**2 + b * nu + c
 
-def fitta_deep(odmr, N=1, regione=None, nu0s=None):
+def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
     """
     Esegue il fit della risonanza profonda (deep) in uno spettro ODMR.
     """
@@ -193,28 +193,19 @@ def fitta_deep(odmr, N=1, regione=None, nu0s=None):
     params = []
     curva = np.zeros_like(odmr['freq'])
     n_curve = []
-        
+    
+    print("Fit separato:")
     for i in range(0, N):
         singola_lorentziana = []
-       
-        # un po' stupido: siccome fitto N volte basta fare N regioni usando nu0s
-        '''
-        if regione:
-            mask = (odmr['freq'] >= regione[0]) & (odmr['freq'] <= regione[1])
-            freq = odmr['freq'][mask].copy()
-            od_data = odmr['od'][mask].copy()
-        else:
-            freq = odmr['freq']
-            od_data = odmr['od'].copy()
-        '''
 
-        mask = (odmr['freq'] >= nu0s[i]-10) & (odmr['freq'] <= nu0s[i]+10)
+        mask = (odmr['freq'] >= nu0s[i]-4) & (odmr['freq'] <= nu0s[i]+4)
         freq = odmr['freq'][mask].copy()
         od_data = odmr['od'][mask].copy()
         
         help = np.zeros_like(freq)
         
         # SE LORENTZ + QUADRATICA
+        '''
         if nu0s is None:
             p0 = [0.5, 5, 2870, 0., 0., 0.]  # A, gamma, nu0, a, b, c
             low = [0, 0, 2860, -np.inf, -np.inf, -1]
@@ -223,24 +214,22 @@ def fitta_deep(odmr, N=1, regione=None, nu0s=None):
             p0 = [0.5, 5, nu0s[i], 0., 0., 0.]  # A, gamma, nu0, a, b, c
             low = [0, 0, nu0s[i]-5, -np.inf, -np.inf, -1]
             upp = [1, 10, nu0s[i]+5, np.inf, np.inf, 1]
-        
-        # SENZA RETTA
         '''
+        # SENZA PARABOLA
         if nu0s is None:
             p0 = [0.5, 5, 2870, 0., 0.]  # A, gamma, nu0, m, q
             low = [0, 0, 2860, -np.inf, -1]
             upp = [1, 20, 2880, np.inf, 1]
         else:
             p0 = [0.5, 5, nu0s[i], 0.]  # A, gamma, nu0, q
-            low = [0, 2, nu0s[i]-5, -1]
+            low = [0, 0, nu0s[i]-5, -1]
             upp = [1, 10, nu0s[i]+5, 1] 
-        '''
-        
-        popt, pcov = curve_fit(lorentziana_più_quad, freq, od_data, p0=p0, maxfev=500000, bounds=(low,upp))
-    
+
+        popt, pcov = curve_fit(lorentziana, freq, od_data, p0=p0, maxfev=500000, bounds=(low,upp))
+
         singola_lorentziana.append( (popt, pcov) )
-        curva[mask] += lorentziana_più_quad(freq, *popt)
-        help = lorentziana_più_quad(freq, *popt)
+        curva[mask] += lorentziana(freq, *popt)
+        help = lorentziana(freq, *popt)
         n_curve.append((freq,help))
         
         print(f"{i}. A={popt[0]}, gamma={popt[1]}, nu0={popt[2]}")
@@ -252,3 +241,60 @@ def fitta_deep(odmr, N=1, regione=None, nu0s=None):
     
     # così ritorno N curve
     return params, n_curve
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+def fitta_deep_insieme(odmr, N=1, regione=None, nu0s=None):
+    """
+    Esegue il fit della risonanza profonda (deep) in uno spettro ODMR.
+    """
+
+    def n_lorentziane(nu, *params):
+        """
+        Somma di N lorentziane più traslazione.
+        params: lista di parametri [A1, gamma1, nu01, A2, gamma2, nu02, ..., q]
+        """
+        result = np.zeros_like(nu)
+        for i in range(N):
+            A = params[3*i]
+            gamma = params[3*i + 1]
+            nu0 = params[3*i + 2]
+            result += -A / (1 + ((nu - nu0)/gamma)**2)
+        # Traslazione
+        q = params[-1]
+        result += q
+        return result
+
+    
+    if regione:
+        mask = (odmr['freq'] >= regione[0]) & (odmr['freq'] <= regione[1])
+        freq = odmr['freq'][mask].copy()
+        od_data = odmr['od'][mask].copy()
+    else:
+        freq = odmr['freq']
+        od_data = odmr['od'].copy()
+    
+    help = np.zeros_like(freq)
+    
+    p0 = []
+    low = []
+    upp = []
+    
+    # parametri lorentziane
+    for nu0 in nu0s:
+        p0 += [0.5, 5, nu0]  # A, gamma, nu0
+        low += [0, 0, nu0-5]
+        upp += [1, 10, nu0+5]
+    # traslazione
+    p0 += [0.]
+    low += [-1]
+    upp += [+1]
+
+    popt, pcov = curve_fit(n_lorentziane, freq, od_data, p0=p0, maxfev=500000, bounds=(low,upp))
+
+    print("Fit insieme:")
+    for i in range(0, N):
+        print(f"{i}. A={popt[3*i]}, gamma={popt[3*i+1]}, nu0={popt[3*i+2]}")
+    
+    # così ritorno N curve
+    return (popt, pcov), (freq, n_lorentziane(freq, *popt))
