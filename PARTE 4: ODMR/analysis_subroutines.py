@@ -4,8 +4,8 @@ from scipy.optimize import curve_fit
 import inspect
 from funzioni import *
 
-
-def sostituisci_nan_con_vicino(vettore):
+# questa funzione è utile al momento della lettura dei file
+def _sostituisci_nan_con_vicino(vettore):
     """
     Sostituisce i valori NaN in un array con il valore a sinistra.
     Se il primo elemento è NaN, usa il valore a destra.
@@ -27,20 +27,28 @@ def leggi_file_odmr(nome):
     }
     
     data = np.loadtxt(nome, skiprows=2, delimiter='|')
-    odmr['freq'] = data[:, 0]  # in kHz
+    odmr['freq'] = data[:, 0]  # in MHz
     odmr['ref']  = data[:, 1]   # in V
     odmr['od']   = data[:, 2]    # in V
     odmr['lock'] = data[:, 3]
     
     # Controlla e sostituisce i NaN in ciascun vettore
-    odmr['freq'] = sostituisci_nan_con_vicino(odmr['freq'])
-    odmr['ref'] = sostituisci_nan_con_vicino(odmr['ref'])
-    odmr['od'] = sostituisci_nan_con_vicino(odmr['od'])
-    odmr['lock'] = sostituisci_nan_con_vicino(odmr['lock'])
+    odmr['freq'] = _sostituisci_nan_con_vicino(odmr['freq'])
+    odmr['ref'] = _sostituisci_nan_con_vicino(odmr['ref'])
+    odmr['od'] = _sostituisci_nan_con_vicino(odmr['od'])
+    odmr['lock'] = _sostituisci_nan_con_vicino(odmr['lock'])
 
     return odmr
 
-    
+# lo spettro lock-in non ha il fondo attorno a 0, occorre una traslazione verticale
+def trasla_spettro_lock_in(odmr):
+    """
+    Trasla verticalmente il segnale lock-in della sua stessa media.
+    """
+    media = np.mean(odmr['lock'])
+    odmr['lock'] -= media
+    return odmr
+
 # + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
     
 def fit_sin_odmr(odmr, key: str, region: tuple = None, p0 = None, sinp0=None, fit_func = lin_plus_var_sin_func):
@@ -75,7 +83,7 @@ def fit_sin_odmr(odmr, key: str, region: tuple = None, p0 = None, sinp0=None, fi
         # Generate initial p0 with appropriate number of values
         p0 = [0.1] * (num_params-1)
         p0[0] = 0.005  # sempre a
-        p0[1] = 0.42  # sempre k | un 2π ogni 15 kHz -> 2π/15
+        p0[1] = 0.42  # sempre k | un 2π ogni 15 MHz -> 2π/15
         p0[2] = 0  # sempre phi
         
         
@@ -109,7 +117,7 @@ def fit_sin_odmr(odmr, key: str, region: tuple = None, p0 = None, sinp0=None, fi
 
 # PLOTTER #
 
-color = ['blue', 'green', 'orange', 'purple']
+color = ['blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta']
 
 def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
     
@@ -127,7 +135,7 @@ def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
         for i, fit_curve in enumerate(fit_curves):
             plt.plot(fit_curve[0], fit_curve[1], color=color[i], linestyle='--', label=f'Fit {i+1}')
             plt.legend()
-    plt.xlabel('Frequenza [kHz]')
+    plt.xlabel('Frequenza [MHz]')
     plt.ylabel(yaxis)
     if title:
         plt.title(title+fr" | D={dist}mm")
@@ -149,3 +157,98 @@ def remove_background(odmr, key: str, fit_func, fit_curve, popt, regione=None):
         
     curva_da_sottrarre = fit_func(odmr['freq'][mask], *popt)
     odmr[key][mask] -= curva_da_sottrarre
+    
+    
+# + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
+
+# ODMR #
+def lorentziana(nu, A, gamma, nu0, q):
+    """
+    Funzione di Lorentziana più background lineare.
+    A: ampiezza della Lorentziana
+    gamma: half-width at half-maximum (HWHM)
+    nu0: centro della Lorentziana
+    nu: frequenza (variabile indipendente)
+    """
+    return -A / (1 + ((nu - nu0)/gamma)**2) + q
+
+def lorentziana_più_quad(nu, A, gamma, nu0, a, b, c):
+    """
+    Funzione di Lorentziana più background lineare.
+    A: ampiezza della Lorentziana
+    gamma: half-width at half-maximum (HWHM)
+    nu0: centro della Lorentziana
+    a: coefficiente angolare della retta di background
+    b: coefficiente angolare della quadratica di background
+    c: intercetta della quadratica di background
+    nu: frequenza (variabile indipendente)
+    """
+    return -A / (1 + ((nu - nu0)/gamma)**2) + a * nu**2 + b * nu + c
+
+def fitta_deep(odmr, N=1, regione=None, nu0s=None):
+    """
+    Esegue il fit della risonanza profonda (deep) in uno spettro ODMR.
+    """
+    
+    params = []
+    curva = np.zeros_like(odmr['freq'])
+    n_curve = []
+        
+    for i in range(0, N):
+        singola_lorentziana = []
+       
+        # un po' stupido: siccome fitto N volte basta fare N regioni usando nu0s
+        '''
+        if regione:
+            mask = (odmr['freq'] >= regione[0]) & (odmr['freq'] <= regione[1])
+            freq = odmr['freq'][mask].copy()
+            od_data = odmr['od'][mask].copy()
+        else:
+            freq = odmr['freq']
+            od_data = odmr['od'].copy()
+        '''
+
+        mask = (odmr['freq'] >= nu0s[i]-10) & (odmr['freq'] <= nu0s[i]+10)
+        freq = odmr['freq'][mask].copy()
+        od_data = odmr['od'][mask].copy()
+        
+        help = np.zeros_like(freq)
+        
+        # SE LORENTZ + QUADRATICA
+        if nu0s is None:
+            p0 = [0.5, 5, 2870, 0., 0., 0.]  # A, gamma, nu0, a, b, c
+            low = [0, 0, 2860, -np.inf, -np.inf, -1]
+            upp = [1, 20, 2880, np.inf, np.inf, 1]
+        else:
+            p0 = [0.5, 5, nu0s[i], 0., 0., 0.]  # A, gamma, nu0, a, b, c
+            low = [0, 0, nu0s[i]-5, -np.inf, -np.inf, -1]
+            upp = [1, 10, nu0s[i]+5, np.inf, np.inf, 1]
+        
+        # SENZA RETTA
+        '''
+        if nu0s is None:
+            p0 = [0.5, 5, 2870, 0., 0.]  # A, gamma, nu0, m, q
+            low = [0, 0, 2860, -np.inf, -1]
+            upp = [1, 20, 2880, np.inf, 1]
+        else:
+            p0 = [0.5, 5, nu0s[i], 0.]  # A, gamma, nu0, q
+            low = [0, 2, nu0s[i]-5, -1]
+            upp = [1, 10, nu0s[i]+5, 1] 
+        '''
+        
+        popt, pcov = curve_fit(lorentziana_più_quad, freq, od_data, p0=p0, maxfev=500000, bounds=(low,upp))
+    
+        singola_lorentziana.append( (popt, pcov) )
+        curva[mask] += lorentziana_più_quad(freq, *popt)
+        help = lorentziana_più_quad(freq, *popt)
+        n_curve.append((freq,help))
+        
+        print(f"{i}. A={popt[0]}, gamma={popt[1]}, nu0={popt[2]}")
+
+        params.append(singola_lorentziana)
+    
+    # così ritorno una singola curva
+    #return params, (odmr['freq'], curva)
+    
+    # così ritorno N curve
+    return params, n_curve
