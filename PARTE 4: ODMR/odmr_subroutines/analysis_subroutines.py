@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import inspect
-from funzioni import *
+from odmr_subroutines.funzioni import *
 
 # questa funzione è utile al momento della lettura dei file
 def _sostituisci_nan_con_vicino(vettore):
@@ -198,7 +198,7 @@ def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
     for i in range(0, N):
         singola_lorentziana = []
 
-        mask = (odmr['freq'] >= nu0s[i]-4) & (odmr['freq'] <= nu0s[i]+4)
+        mask = (odmr['freq'] >= nu0s[i]-20) & (odmr['freq'] <= nu0s[i]+20)
         freq = odmr['freq'][mask].copy()
         od_data = odmr['od'][mask].copy()
         
@@ -219,11 +219,11 @@ def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
         if nu0s is None:
             p0 = [0.5, 5, 2870, 0., 0.]  # A, gamma, nu0, m, q
             low = [0, 0, 2860, -np.inf, -1]
-            upp = [1, 20, 2880, np.inf, 1]
+            upp = [1., 30, 2880, np.inf, 1]
         else:
             p0 = [0.5, 5, nu0s[i], 0.]  # A, gamma, nu0, q
-            low = [0, 0, nu0s[i]-5, -1]
-            upp = [1, 10, nu0s[i]+5, 1] 
+            low = [0, 0, nu0s[i]-20, -1]
+            upp = [1., 30, nu0s[i]+20, 1] 
 
         popt, pcov = curve_fit(lorentziana, freq, od_data, p0=p0, maxfev=500000, bounds=(low,upp))
 
@@ -283,8 +283,8 @@ def fitta_deep_insieme(odmr, N=1, regione=None, nu0s=None):
     # parametri lorentziane
     for nu0 in nu0s:
         p0 += [0.5, 5, nu0]  # A, gamma, nu0
-        low += [0, 0, nu0-5]
-        upp += [1, 10, nu0+5]
+        low += [0, 0, nu0-25]
+        upp += [10., 30, nu0+25]
     # traslazione
     p0 += [0.]
     low += [-1]

@@ -60,13 +60,19 @@ def intensità_e_frequenze_sweep (time, ch_A, ch_B, index):
     # HACK: non prende bene la regione dello sweep senza magnete
     if index == 9:
         regione = np.arange(286, 694)
-    
-    frequenze = [2500 + 0.25 * i for i in range(len(time[regione]))]  # 2500 + 0.25*i per i in [0, 2800] (len regione è il numero di punti [2800], non il delta T)
+        
+    # pensavo lo step fosse 0.25, ma è evidente che non sia così. devo cambiare.
+    # da: frequenze = [2500 + 0.25 * i for i in range(len(time[regione]))]  
+    # 2500 + 0.25*i per i in [0, 2800] 
+    # (len regione è il numero di punti [2800], non il delta T)
+    # a:
+    passo = (3200-2500) / (len(time[regione]))  # passo corretto
+    frequenze = [2500 + passo * i for i in range(len(time[regione]))]
     intensità = ch_A[regione]  # intensità PL nella regione selezionata
-    
+    '''
     if index == 9:
         # quello senza magnete ha un passo di 0.5Hz
-        frequenze = [2500 + 0.5 * i for i in range(len(time[regione]))]
+        frequenze = [2500 + 0.5 * i for i in range(len(time[regione]))]'''
     return frequenze, intensità
 
 
