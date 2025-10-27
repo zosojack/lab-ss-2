@@ -203,6 +203,7 @@ def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
     params = []
     curva = np.zeros_like(odmr['freq'])
     n_curve = []
+    profondità_deeps = []
     
     print("Fit separato:")
     for i in range(0, N):
@@ -242,6 +243,8 @@ def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
         help = lorentziana(freq, *popt)
         n_curve.append((freq,help))
         
+        profondità_deeps.append(lorentziana(popt[2], *popt))
+        
         print(f"{i}. A={popt[0]}, gamma={popt[1]}, nu0={popt[2]}")
 
         params.append(singola_lorentziana)
@@ -249,8 +252,9 @@ def fitta_deep_separati(odmr, N=1, regione=None, nu0s=None):
     # così ritorno una singola curva
     #return params, (odmr['freq'], curva)
     
+    
     # così ritorno N curve
-    return params, n_curve
+    return params, n_curve, profondità_deeps    
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -306,5 +310,8 @@ def fitta_deep_insieme(odmr, N=1, regione=None, nu0s=None):
     for i in range(0, N):
         print(f"{i}. A={popt[3*i]}, gamma={popt[3*i+1]}, nu0={popt[3*i+2]}")
     
+    deeps = [popt[2+3*j] for j in range(N)]
+    profondità_deep = n_lorentziane(deeps, *popt)
+    
     # così ritorno N curve
-    return (popt, pcov), (freq, n_lorentziane(freq, *popt))
+    return (popt, pcov), (freq, n_lorentziane(freq, *popt)), profondità_deep
