@@ -1,0 +1,2 @@
+QUESTI SPETTRI SONO TUTTI PERFETTI PERCHÉ SONO SOLO SOMME DI LORENTZIANE
+Otteniamo i parametri ottimali di una funzione multi-lorentziana fittando lo spettro, quindi andiamo a graficare SOLTANTO la multi-lorentziana stessa!

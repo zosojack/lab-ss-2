@@ -172,6 +172,16 @@ def lorentziana(nu, A, gamma, nu0, q):
     """
     return -A / (1 + ((nu - nu0)/gamma)**2) + q
 
+def derivata_lorentziana(nu, A, gamma, nu0):
+    """
+    Derivata della funzione di Lorentziana.
+    A: ampiezza della Lorentziana
+    gamma: half-width at half-maximum (HWHM)
+    nu0: centro della Lorentziana
+    nu: frequenza (variabile indipendente)
+    """
+    return (2 * A * (nu - nu0) / gamma**2) / (1 + ((nu - nu0)/gamma)**2)**2
+
 def lorentziana_più_quad(nu, A, gamma, nu0, a, b, c):
     """
     Funzione di Lorentziana più background lineare.
