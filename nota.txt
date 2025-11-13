@@ -1,0 +1,14 @@
+al 30mm aggiungere dopo il primo e prima dell'ultimo:
+2822 e 2891
+
+IL 20 HA ALTRI DUE PICCHI CHE NON VEDO DA NESSUN ALTRA PARTE MALEDETTO IL SIGNORE
+parlo di: 2810 e 2940
+si intravedono anche nel 22mm:  2790 e 2925
+
+bisogna stare moooolto attenti a questi 6 picchi centrali (4 + 2 in forse)
+perché, qualsiasi cosa siano, il problema è:
+nel 22 prendi i quattro 'interni': no si si | si si no
+nel 20 prendi due esterni e due interni: si no si | si no si
+QUINDI compromette sicuramente poi il fit, l'andamento ha una discontinuità, mi spiego?
+
+COSA È MEGLIO FARE? E UNA VOLTA CHE SI È CAPITO COSA È MEGLIO PER IL FIT... CHE MINCHIA SONO?
