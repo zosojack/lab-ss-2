@@ -119,7 +119,7 @@ def fit_sin_odmr(odmr, key: str, region: tuple = None, p0 = None, sinp0=None, fi
 
 color = ['blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral', 'gold', 'silver']
 
-def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
+def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None, option=False, originals_nu0s=None, new_piks=None):
     
     if key == 'lock':
         yaxis = 'Segnale Lock-In [V]'
@@ -129,13 +129,40 @@ def plot_odmr(odmr, key: str, title=None, dist=0, fit_curves=None):
     if dist == 1000:
         dist = '\infty'
     
-    plt.figure(figsize=(10, 3), dpi=200)
+    if option == True:
+        plt.figure(figsize=(10, 3), dpi=400)
+    else:
+        plt.figure(figsize=(10, 3), dpi=200)
     plt.plot(odmr['freq'], odmr[key], color='red')    
     if fit_curves is not None:
         for i, fit_curve in enumerate(fit_curves):
-            plt.plot(fit_curve[0], fit_curve[1], color=color[i], linestyle='--', label=f'Fit {i+1}')
+            if option == True:
+                plt.plot(fit_curve[0], fit_curve[1], color=color[i], linestyle='--', linewidth=0.8, label=f'Fit {i+1}')
+            else:
+                plt.plot(fit_curve[0], fit_curve[1], color=color[i], linestyle='--', label=f'Fit {i+1}')
             plt.legend()
+    if originals_nu0s is not None and option == True:
+        for nu0 in originals_nu0s:
+            plt.axvline(x=nu0, color='black', linestyle=':', linewidth=0.8)
+            
+    if new_piks is not None and option == True:
+        for pik in new_piks:
+            plt.axvline(x=pik, color='orange', linestyle='--', linewidth=0.8)
+            
     plt.xlabel('Frequenza [MHz]')
+    if option == True:
+        from matplotlib.ticker import MultipleLocator
+        ax = plt.gca()
+        ax.xaxis.set_major_locator(MultipleLocator(100))
+        ax.xaxis.set_minor_locator(MultipleLocator(20))
+        ax.tick_params(axis='x', which='major', labelsize=7, length=6)
+        ax.tick_params(axis='x', which='minor', labelsize=5, length=3)
+        for lab in ax.xaxis.get_majorticklabels():
+            lab.set_fontweight('bold')
+        # Grid major
+        ax.grid(axis='x', which='major', linestyle='--', alpha=0.45)
+        # Grid minor (solo linee verticali senza etichette)
+        ax.grid(axis='x', which='minor', linestyle='--', alpha=0.25)
     plt.ylabel(yaxis)
     if title:
         plt.title(title+fr" | D={dist}mm")
