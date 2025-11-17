@@ -1,166 +1,79 @@
-% filepath: prove_fit_6linee.m
-% Fit di Exp.SampleFrame (e opzionalmente Field) per ottenere 6 deep in [2.5 3.2] GHz
+clear all; clc;
 
-clear; clc;
-
-% --- EasySpin ---
-espath = '/Users/zosojack/easyspin-6.0.11/easyspin';
-if isempty(which('pepper')), addpath(genpath(espath)); rehash; end
-
-% --- Sistema NV e Exp ---
+% ----- Sistema di spin -----
 Sys.S = 1;
 Sys.g = 2.0;
-Sys.D = [2870 10];        % [D E] MHz (E regola la separazione dei doppi)
-Sys.lwpp = 6;             % restringi se serve separazione (es. 4–6 MHz)
+Sys.D = [2870 10];
+Sys.Nucs = 'C';
+Sys.A = [127, 127, 127];
+Sys.lwpp = 8;
 
-Exp.Field = 16.85433;     % mT (verrà scalato leggermente opzionalmente)
-Exp.mwRange = [2.5 3.2];  % FISSO
+% ----- Parametri sperimentali -----
+Exp.Field = 1.5;       % mT
+Exp.mwRange = [2.5 3.2];    % GHz
 Exp.Harmonic = 0;
-
 ma = 54.73561;
-Exp.MolFrame = [45 ma 0]*pi/180;  % fisso per NV in diamante
+Exp.MolFrame = [45 ma 0]*pi/180;
 Exp.CrystalSymmetry = 227;
+Opt.Sites = [];
 
-% --- Target (6 linee) ---
-target = [2.58303, 2.76875, 2.83447, 2.94180, 2.99815, 3.12104];
+% ----- Target peaks -----
+target_peaks = [2.816 2.844 2.874 2.899];
 
-% --- Angoli misurati B–NV (gradi) ---
-theta_meas = [51 78 85];
+% ======= QUI IMPOSTI I TUOI ANGOLI =======
+alpha = 90;    % <-- N1
+beta  = 45;    % <-- N2
 
-% --- Assi NV cristallo (<111>) ---
-Uall = [ 1  1  1;
-         1 -1  1;
-        -1  1  1;
-        -1 -1  1] / sqrt(3);
+gamma_i   = 10;   % <-- N3_i
+gamma_step = 5;
+N = 10;           % numero di grafici
+% gamma_f = gamma_i + gamma_step * N
+% ==========================================
 
-% --- Stima iniziale di B (come prima) ---
-subs = nchoosek(1:4,3); perms3 = perms(1:3);
-best = struct('sse',Inf,'idx',[],'perm',[],'b',[]);
-for si=1:size(subs,1)
-    idx=subs(si,:); U=Uall(idx,:);
-    for pi=1:size(perms3,1)
-        c = cosd(theta_meas(perms3(pi,:))).';
-        b = U\c; if norm(b)==0, continue; end
-        b = b/norm(b);
-        thp = acosd(U*b);
-        sse = sum((thp - theta_meas(perms3(pi,:)).').^2);
-        if sse<best.sse, best=struct('sse',sse,'idx',idx,'perm',perms3(pi,:),'b',b); end
-    end
-end
+threshold = -0.1;
 
-b0 = best.b(:);
-phi0 = atan2(b0(2), b0(1));
-theta0 = acos(b0(3));
-Opt.Sites = best.idx;   % usa i 3 siti osservati
+for k = 0:N-1
+    gamma = gamma_i + k * gamma_step;
 
-% --- Parametri estrazione deep ---
-threshold = -0.1;   % ips negativo
-dminGHz   = 0.030;  % distanza minima
-promMin   = 0.06;   % prominenza minima
-dx_fallbackGHz = 0.001; % stima passo se serve
+    % ----- Simulazione -----
+    Exp.SampleFrame = [alpha beta gamma] * pi/180;
+    [x, y] = pepper(Sys, Exp, Opt);
+    ips = -y / max(y);
 
-get_deeps = @(x,ips) local_get_deeps(x,ips,threshold,dminGHz,promMin,dx_fallbackGHz);
-
-% --- Piccolo fit locale: varia phi/theta (±5°) e, opzionale, Field (±2%) ---
-dgrid = (-5:1:5)*pi/180;         % +/-5° a passi di 1°
-fieldScales = 1;                 % tieni fisso il campo
-% Se vuoi consentire piccola calibrazione, usa: fieldScales = 0.98:0.01:1.02;
-
-bestFit = struct('sse',Inf,'phi',phi0,'theta',theta0,'fs',1,'deeps',[]);
-
-for fs = fieldScales
-    Exp.Field = 16.85433 * fs;
-    for dph = dgrid
-        for dth = dgrid
-            Exp.SampleFrame = [phi0+dph, theta0+dth, 0];
-            try
-                [x,y] = pepper(Sys, Exp, Opt);
-            catch
-                continue;
-            end
-            ips = -y / max(abs(y)+eps);
-            deeps = get_deeps(x,ips);
-            if numel(deeps) < 6
-                % penalizza se meno di 6: salta
-                continue;
-            end
-            % match greedily 6 deeps ai 6 target
-            sse = local_match_sse(deeps, target);
-            if sse < bestFit.sse
-                bestFit = struct('sse',sse,'phi',Exp.SampleFrame(1), ...
-                    'theta',Exp.SampleFrame(2),'fs',fs,'deeps',deeps);
-            end
+    % ----- Trova picchi in base al tuo criterio -----
+    locs = [];
+    for i = 2:length(ips)-1
+        if ips(i) < ips(i-1) && ips(i) < ips(i+1) && ips(i) < threshold
+            locs(end+1) = x(i);
         end
     end
-end
+    locs = sort(locs);
 
-% --- Simulazione finale con i migliori parametri trovati ---
-Exp.Field = 16.85433 * bestFit.fs;
-Exp.SampleFrame = [bestFit.phi, bestFit.theta, 0];
-[x,y] = pepper(Sys, Exp, Opt);
-ips = -y / max(abs(y)+eps);
-deeps = get_deeps(x,ips);
+    % ----- Plot -----
+    figure; hold on; grid on;
+    plot(x, ips, 'LineWidth', 1.2);
 
-fprintf('Best: phi=%.2f°, theta=%.2f°, FieldScale=%.3f, SSE=%.3g, #deeps=%d\n', ...
-    bestFit.phi*180/pi, bestFit.theta*180/pi, bestFit.fs, bestFit.sse, numel(deeps));
+    % threshold line
+    yline(threshold, 'k--', 'LineWidth', 1.2);
 
-% --- Plot ---
-figure('Position',[100 100 1100 520]);
-plot(x, ips, 'b-', 'LineWidth', 1.5); grid on; hold on;
-xlabel('Frequenza (GHz)'); ylabel('Intensità (norm.)');
-title(sprintf('Fit 6 linee | phi=%.1f°, theta=%.1f° | Field %.5f mT', ...
-    bestFit.phi*180/pi, bestFit.theta*180/pi, 16.85433*bestFit.fs));
-% deeps selezionati (solo i 6 abbinati ai target)
-[~, matchIdx] = local_match_sse(deeps, target);
-xline(deeps(matchIdx), 'r-', 'LineWidth', 0.8);
-% target
-for i=1:numel(target), xline(target(i),'k:'); end
-legend('pepper','deep selezionati','target','Location','best');
-
-% ===== Funzioni locali =====
-function [deeps] = local_get_deeps(x,ips,threshold,dminGHz,promMin,dx_fallback)
-    if numel(x)>1, dx = mean(diff(x)); else, dx = dx_fallback; end
-    if exist('findpeaks','file')==2
-        s = -ips;
-        [~, locsX] = findpeaks(s, x, ...
-            'MinPeakHeight', -threshold, ...
-            'MinPeakDistance', dminGHz, ...
-            'MinPeakProminence', promMin);
-        deeps = sort(locsX(:).');
-    else
-        winGHz = 0.02;
-        dminSamp = max(1, round(dminGHz/dx));
-        winSamp  = max(1, round(winGHz/dx));
-        cand = find(ips(2:end-1) < ips(1:end-2) & ips(2:end-1) < ips(3:end)) + 1;
-        cand = cand(ips(cand) < threshold);
-        keep = false(size(cand));
-        for ii=1:numel(cand)
-            i0=cand(ii); L=max(1,i0-winSamp); R=min(numel(ips),i0+winSamp);
-            prom = max(ips(L:R)) - ips(i0);
-            keep(ii) = prom >= promMin;
-        end
-        cand = cand(keep);
-        [~,ord] = sort(ips(cand),'ascend'); cand = cand(ord);
-        sel = [];
-        for ii=1:numel(cand)
-            if isempty(sel) || all(abs(x(cand(ii)) - x(sel)) >= dminGHz)
-                sel(end+1)=cand(ii); %#ok<AGROW>
-            end
-        end
-        deeps = sort(x(sel));
+    % target peaks
+    for p = target_peaks
+        xline(p, 'r--', 'LineWidth', 1.2);
     end
-end
 
-function [sse, pickIdx] = local_match_sse(deeps, target)
-    % Abbina greedily 6 deeps ai 6 target (1:1, per prossimità)
-    deeps = deeps(:).'; target = target(:).';
-    % se più di 6 deeps, usa i più vicini ai target
-    pickIdx = zeros(1,numel(target));
-    avail = true(1,numel(deeps));
-    sse = 0;
-    for k=1:numel(target)
-        [~,idx] = min(abs(deeps - target(k)) + (~avail)*1e3);
-        pickIdx(k) = idx; avail(idx)=false;
-        sse = sse + (deeps(idx)-target(k))^2;
+    % punti trovati dal detector
+    if ~isempty(locs)
+        plot(locs, interp1(x, ips, locs), 'bo', 'MarkerSize', 7, 'LineWidth', 1.5);
     end
+
+    xlabel('Frequenza (GHz)');
+    ylabel('Intensità normalizzata');
+    title(sprintf('alpha = %.1f°, beta = %.1f°, gamma = %.1f°', alpha, beta, gamma));
+    legend('Spettro', 'Threshold', 'Target peaks', 'Picchi simulati');
+
+    hold off;
+
+    % stampa info a terminale
+    fprintf('gamma = %.1f ---> picchi trovati: ', gamma);
+    disp(locs);
 end
