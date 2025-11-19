@@ -9,7 +9,7 @@ Sys.A = [127, 127, 127];
 Sys.lwpp = 8;
 
 % ----- Parametri sperimentali -----
-Exp.Field = 1.47;            % mT
+Exp.Field = 5.58;            % mT
 Exp.mwRange = [2.5 3.2];     % GHz
 Exp.Harmonic = 0;
 ma = 54.73561;
@@ -21,11 +21,11 @@ Opt.Sites = [];
 target_peaks = [2.76 2.816 2.844 2.874 2.899 2.969];
 
 % ============================================
-%     QUI INSERISCI LA TERNA DA TESTARE
+%     ANGOLI DA TESTARE
 % ============================================
-alpha = 11;   % <-- Sostituisci
-beta  = 62;   % <-- Sostituisci
-gamma = 49;   % <-- Sostituisci
+alpha = 10;   
+beta  = 62;   
+gamma = 49;   
 % ============================================
 
 Exp.SampleFrame = [alpha beta gamma]*pi/180;
@@ -66,3 +66,18 @@ hold off;
 % stampa informazioni a schermo
 disp('Picchi simulati trovati:');
 disp(locs(:));
+
+%% ============================================================
+%     SALVATAGGIO SU CSV DELLE COORDINATE X E Y
+%% ============================================================
+
+% costruzione nome file
+filename = sprintf('spettri-simulati/a%d-b%d-g%d-B%.6f.csv', alpha, beta, gamma, Exp.Field);
+
+% matrice due colonne
+data_to_save = [x(:), ips(:)];
+
+% salva CSV
+writematrix(data_to_save, filename);
+
+fprintf('\nFile salvato: %s\n', filename);
